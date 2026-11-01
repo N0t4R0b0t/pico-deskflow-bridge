@@ -1,0 +1,25 @@
+# The default build is for the Pico 2 W. For the original Pico W:
+#
+#     cargo build --release --target thumbv6m-none-eabi --no-default-features --features pico-w
+#
+# or `cargo pico-w` (alias below). `scripts/uf2.sh [pico2-w|pico-w]` builds
+# the UF2 for either.
+
+[build]
+target = "thumbv8m.main-none-eabihf"
+
+[alias]
+pico2-w = "build --release"
+pico-w = "build --release --target thumbv6m-none-eabi --no-default-features --features pico-w"
+
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+linker = "flip-link"
+
+# No debug probe needed: `cargo run --release` converts the ELF to UF2 and
+# copies it to a Pico mounted in BOOTSEL mode. In a remote workspace use
+# `scripts/uf2.sh` and download the file instead.
+[target.thumbv8m.main-none-eabihf]
+runner = "python3 ../scripts/elf2uf2.py --family rp2350 --deploy --also ../bootloader/target/thumbv8m.main-none-eabihf/release/pico-deskflow-bridge-bootloader --blank 0x10020000:0x1000"
+
+[target.thumbv6m-none-eabi]
+runner = "elf2uf2-rs -d"

@@ -1,0 +1,23 @@
+[package]
+name = "tls-offload-test"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Host test of firmware/src/tls_offload.rs against openssl s_server"
+
+[workspace]
+
+[dependencies]
+deskflow-proto = { path = "../../deskflow-proto" }
+embassy-sync = "0.8"
+embassy-futures = "0.1.2"
+embedded-io-async = "0.7"
+embedded-tls = { version = "0.19", default-features = false, features = ["std"] }
+critical-section = { version = "1", features = ["std"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+tokio = { version = "1", features = ["full"] }
+embedded-io-adapters = { version = "0.7", features = ["tokio-1"] }
+
+[patch.crates-io]
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }

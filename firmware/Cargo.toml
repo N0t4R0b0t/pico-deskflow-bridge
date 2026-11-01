@@ -1,0 +1,92 @@
+[package]
+name = "pico-deskflow-bridge"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/N0t4R0b0t/pico-deskflow-bridge"
+publish = false
+
+# Kept out of any parent workspace: this crate only builds for thumbv6m.
+[workspace]
+
+[dependencies]
+deskflow-proto = { path = "../deskflow-proto" }
+
+embassy-executor = { version = "0.10", features = ["platform-cortex-m", "executor-thread", "executor-interrupt"] }
+# The chip feature (rp2040 / rp235xa) comes from the board feature below.
+embassy-rp = { version = "0.10", features = ["unstable-pac", "time-driver", "critical-section-impl"] }
+embassy-time = "0.5.1"
+embassy-sync = "0.8"
+embassy-futures = "0.1.2"
+embassy-usb = "0.6"
+embassy-usb-logger = "0.6"
+embassy-net = { version = "0.9.1", features = ["tcp", "udp", "proto-ipv4", "medium-ethernet"] }
+cyw43 = { version = "0.7", features = ["bluetooth"] }
+cyw43-pio = "0.10"
+
+# BLE host. trouble tracks embassy main, so both are pinned to the revisions
+# trouble's own rp-pico-w example builds against (see [patch.crates-io]).
+# `central` is unused but required: at this rev trouble-host only imports
+# `BdAddr` for the security manager when `central` is enabled.
+trouble-host = { git = "https://github.com/embassy-rs/trouble.git", rev = "43a14413508eb63a114df672f9a93dab624b717d", default-features = false, features = ["peripheral", "central", "gatt", "derive", "security", "serde", "log", "default-packet-pool", "default-packet-pool-mtu-128"] }
+embassy-crypto = { git = "https://github.com/embassy-rs/embassy.git", rev = "bd35bd7a7d19147c8bcae9c2eda99b25e597294c" }
+embassy-crypto-rustcrypto = { git = "https://github.com/embassy-rs/embassy.git", rev = "bd35bd7a7d19147c8bcae9c2eda99b25e597294c", features = ["embassy-crypto-aes128-ecb", "embassy-crypto-aes128-cmac", "embassy-crypto-p256-ecdh"] }
+rand_chacha = { version = "0.3", default-features = false }
+
+# Deskflow TLS (the provider lives in deskflow-proto). RSA signature checks
+# need a heap.
+embedded-tls = { version = "0.19", default-features = false, features = ["log"] }
+embedded-alloc = "0.7"
+# rsa → num-bigint-dig → lazy_static uses spin, which needs CAS atomics that
+# thumbv6m lacks; route it through portable-atomic (critical-section).
+spin = { version = "0.9", default-features = false, features = ["portable_atomic"] }
+
+# Bond storage in the last flash sectors
+sequential-storage = { version = "7.1", features = ["postcard"] }
+embedded-storage-async = "0.4.1"
+# Firmware updates, with the bootloader in ../bootloader.
+embassy-boot-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a", optional = true }
+serde = { version = "1", default-features = false, features = ["derive"] }
+
+log = "0.4"
+cortex-m = "0.7.6"
+# paint-stack: the settings page shows how much stack was never used.
+cortex-m-rt = { version = "0.7.5", features = ["paint-stack"] }
+panic-halt = "1"
+static_cell = "2.1"
+portable-atomic = { version = "1.5", features = ["critical-section"] }
+heapless = { version = "0.9", features = ["serde"] }
+embedded-io-async = "0.7"
+embedded-io = "0.7"
+bt-hci = "0.11"
+fixed = "1.31"
+
+[features]
+default = ["pico2-w"]
+# Exactly one board. Each also needs its target (see .cargo/config.toml).
+pico-w = ["embassy-rp/rp2040"]
+pico2-w = ["embassy-rp/rp235xa", "dep:embassy-boot-rp"]
+
+[profile.release]
+debug = 2
+lto = true
+# For speed, not size: core 1 decrypts every mouse move in software, and at
+# "s" it falls behind a fast mouse. Generic crypto is instantiated in this
+# crate, so per-package overrides wouldn't reach it.
+opt-level = 3
+codegen-units = 1
+
+[profile.dev]
+opt-level = "s"
+
+[patch.crates-io]
+cyw43 = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+cyw43-pio = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-usb = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-usb-logger = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-net = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }

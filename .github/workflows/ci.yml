@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  host:
+    name: deskflow-proto tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: deskflow-proto
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the pinned toolchain
+        working-directory: .
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal --component clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: deskflow-proto
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      # Includes the TLS handshakes against `openssl s_server` (preinstalled
+      # on the runner).
+      - name: Tests
+        run: cargo test
+      - name: Keyboard layouts are up to date
+        working-directory: .
+        run: |
+          python3 tools/gen_layouts.py --out "$RUNNER_TEMP/layouts.rs"
+          diff -u deskflow-proto/src/layouts.rs "$RUNNER_TEMP/layouts.rs"
+
+  tls-offload:
+    name: core-1 TLS offload (host)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: tools/tls-offload-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the pinned toolchain
+        working-directory: .
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/tls-offload-test
+      # Runs firmware/src/tls_offload.rs with a thread as core 1, against
+      # `openssl s_server`.
+      - name: Sessions, stop/restart, failures
+        run: cargo run --release
+
+  firmware:
+    name: firmware + UF2 (${{ matrix.board }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board: pico2-w
+            target: thumbv8m.main-none-eabihf
+            cargo-args: ""
+          - board: pico-w
+            target: thumbv6m-none-eabi
+            cargo-args: --target thumbv6m-none-eabi --no-default-features --features pico-w
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the pinned toolchain
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal --component clippy,rust-src --target ${{ matrix.target }}
+      - name: libudev (for elf2uf2-rs)
+        if: matrix.board == 'pico-w'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: firmware
+          key: ${{ matrix.board }}
+      - name: flip-link
+        run: cargo install --locked flip-link@0.1.12
+      - name: Clippy
+        working-directory: firmware
+        run: cargo clippy --release ${{ matrix.cargo-args }} -- -D warnings
+      - name: Clippy (bootloader)
+        if: matrix.board == 'pico2-w'
+        working-directory: bootloader
+        run: cargo clippy --release -- -D warnings
+      - name: Build UF2
+        run: ./scripts/uf2.sh ${{ matrix.board }}
+      # scripts/elf2uf2.py replaces elf2uf2-rs (which can't do the RP2350);
+      # for the RP2040 its output must match elf2uf2-rs byte for byte.
+      - name: UF2 converter matches elf2uf2-rs
+        if: matrix.board == 'pico-w'
+        run: |
+          cargo install --locked elf2uf2-rs@2.2.0
+          elf2uf2-rs firmware/target/thumbv6m-none-eabi/release/pico-deskflow-bridge reference.uf2
+          cmp reference.uf2 pico-deskflow-bridge-pico-w.uf2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pico-deskflow-bridge-${{ matrix.board }}-uf2
+          path: pico-deskflow-bridge-${{ matrix.board }}*.uf2
+          if-no-files-found: error
+
+  # Pushing a tag like v0.1.0 publishes the UF2s from this run as a release.
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [host, tls-offload, firmware]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: uf2
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l uf2
+          gh release create "$GITHUB_REF_NAME" uf2/*.uf2 \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

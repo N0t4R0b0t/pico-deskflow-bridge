@@ -1,0 +1,25 @@
+[package]
+name = "pico-deskflow-bridge-bootloader"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/N0t4R0b0t/pico-deskflow-bridge"
+publish = false
+
+# Kept out of any parent workspace, like the firmware.
+[workspace]
+
+# Pinned with the firmware: see its Cargo.toml.
+[dependencies]
+embassy-boot-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a", features = ["rp235xa", "unstable-pac", "critical-section-impl"] }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "3cd51e6d8eb6aff8b0d64d9e56a75a538bcfc65a" }
+cortex-m = { version = "0.7.6", features = ["inline-asm"] }
+cortex-m-rt = "0.7.5"
+
+[profile.release]
+debug = 2
+lto = true
+opt-level = "s"
+codegen-units = 1

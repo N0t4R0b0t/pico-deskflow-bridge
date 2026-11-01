@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deskflow Bridge</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #5d6677; --line: #dde1e8;
+  --accent: #2f6fdb; --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --code: #f0f2f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b; --card: #1b2029; --text: #e6e9ef; --muted: #9aa3b2; --line: #2c3340;
+    --accent: #6ea0ff; --ok: #4cc27f; --warn: #e0b04f; --bad: #ef6b5b; --code: #11151c;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 20px 16px 40px; }
+h1 { font-size: 22px; margin: 0 0 16px; }
+h2 { font-size: 15px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.status { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+.label { color: var(--muted); font-size: 13px; }
+.fp { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+.fp-row { margin-top: 12px; }
+form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+label.wide { grid-column: 1 / -1; }
+input, select, textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 7px 9px; width: 100%; }
+.leds { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 8px; }
+.led-row { display: inline-flex; align-items: center; gap: 8px; }
+summary { cursor: pointer; }
+.laptop { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.laptop .name { flex: 1 1 200px; min-width: 0; }
+textarea { resize: vertical; }
+#clip-form { display: grid; gap: 12px; margin-bottom: 12px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+input.invalid { border-color: var(--bad); }
+.hint { font-size: 12px; color: var(--muted); }
+.actions { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+button { font: inherit; font-weight: 600; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer;
+  background: var(--accent); color: #fff; }
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+button.danger { color: var(--bad); }
+.device-actions { margin-top: 16px; }
+#device-message { font-size: 14px; color: var(--muted); }
+kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 4px; padding: 0 4px; background: var(--bg); }
+button:disabled { opacity: .6; cursor: default; }
+#message { font-size: 14px; }
+#message.error, .error { color: var(--bad); } #message.ok, span.ok { color: var(--ok); }
+.log-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; }
+.log-head h2 { margin: 0; }
+pre { margin: 0; background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 10px;
+  height: 340px; overflow: auto; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+body.locked .needs-login, body.view-locked .needs-view { display: none !important; }
+#login { display: none; }
+body.locked #login { display: block; }
+#login form, #password-form { grid-template-columns: 1fr auto; align-items: end; }
+#password-form { grid-template-columns: 1fr 1fr; }
+label.check { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; }
+label.check input { width: auto; }
+.diag { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.diag .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+#offline { display: none; background: var(--bad); color: #fff; border-radius: 8px; padding: 8px 12px; margin-bottom: 16px; }
+@media (max-width: 560px) { form { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Deskflow Bridge</h1>
+  <div id="offline">Can't reach the bridge. Retrying…</div>
+
+  <section id="login">
+    <h2>Log in</h2>
+    <form id="login-form" novalidate>
+      <label>Password
+        <input name="password" type="password" autocomplete="current-password">
+      </label>
+      <button type="submit" id="login-button">Log in</button>
+      <span id="login-message" class="hint"></span>
+    </form>
+    <p class="hint" id="login-hint">Forgot it? With the bridge running, hold its BOOTSEL button for 5 seconds to remove the password.</p>
+  </section>
+
+  <section class="needs-view">
+    <h2>Status</h2>
+    <div class="status">
+      <div><div class="label">Deskflow</div><div class="pill"><span class="dot" id="df-dot"></span><span id="df">…</span></div></div>
+      <div><div class="label">Laptop (Bluetooth)</div><div class="pill"><span class="dot" id="ble-dot"></span><span id="ble">…</span></div></div>
+      <div><div class="label">Uptime</div><div class="pill" id="uptime">…</div></div>
+      <div><div class="label">Last TLS handshake</div><div class="pill" id="handshake">…</div></div>
+    </div>
+    <div class="fp-row"><div class="label">This bridge's certificate (trust it in Deskflow)</div><div class="fp" id="client-fp">…</div></div>
+    <div class="fp-row"><div class="label">Server certificate</div><div class="fp" id="server-fp">…</div></div>
+    <div class="actions device-actions needs-login">
+      <button type="button" class="secondary" id="restart">Restart</button>
+      <button type="button" class="secondary danger" id="forget">Forget paired laptops</button>
+      <span id="device-message"></span>
+    </div>
+  </section>
+
+  <section class="needs-view">
+    <h2>Laptops</h2>
+    <p class="hint" style="margin-top:0">One laptop at a time has the keyboard and mouse. Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>4</kbd> to switch to it, or use the buttons.</p>
+    <div id="laptops"></div>
+    <div class="actions device-actions needs-login">
+      <button type="button" class="secondary" id="pair">Pair a new laptop</button>
+      <span id="laptop-message"></span>
+    </div>
+  </section>
+
+  <section class="needs-view">
+    <details id="panel">
+      <summary><h2 style="display:inline">Panel</h2></summary>
+      <p class="hint">The optional buttons and LEDs. Nothing needs fitting: these do the same. Click a button for a short press, press and hold for a long one.</p>
+      <div class="leds">
+        <span class="led-row"><span class="dot" id="led0"></span>Deskflow</span>
+        <span class="led-row"><span class="dot" id="led1"></span>Bluetooth</span>
+        <span class="led-row"><span class="dot" id="led2"></span>Activity</span>
+        <span class="led-row"><span class="dot" id="led3"></span>Attention</span>
+      </div>
+      <div class="actions device-actions needs-login" id="panel-buttons"></div>
+      <span id="panel-message" class="hint"></span>
+    </details>
+  </section>
+
+  <section class="needs-view">
+    <h2>Diagnostics</h2>
+    <div class="diag">
+      <div><div class="label">Bluetooth signal</div><div class="value" id="d-rssi">…</div></div>
+      <div><div class="label">Connection interval</div><div class="value" id="d-interval">…</div></div>
+      <div><div class="label">Input latency (avg / worst)</div><div class="value" id="d-latency">…</div></div>
+      <div><div class="label">TLS path (avg / worst)</div><div class="value" id="d-tls-path">…</div></div>
+      <div><div class="label">Inbound backlog (avg / worst)</div><div class="value" id="d-backlog">…</div></div>
+      <div><div class="label">Packets in Bluetooth chip (avg / worst)</div><div class="value" id="d-chip">…</div></div>
+      <div><div class="label">Late radio reports</div><div class="value" id="d-flow">…</div></div>
+      <div><div class="label">Connections since start</div><div class="value" id="d-conns">…</div></div>
+      <div><div class="label">Free heap</div><div class="value" id="d-heap">…</div></div>
+      <div><div class="label">Unused stack (core 0 / 1)</div><div class="value" id="d-stack">…</div></div>
+    </div>
+    <p class="hint" style="margin-bottom:0">Latency is the time a key or mouse event spends in the bridge, from Deskflow to the Bluetooth radio, over the last 64 events. TLS path is the time from the USB network to a decoded message, and inbound backlog is what's queued there; a backlog that keeps growing during long moves means the bridge can't keep up. Packets in the Bluetooth chip should stay at 3 or less; each one waits for those ahead of it. Nothing here covers the server or the laptop.</p>
+  </section>
+
+  <section class="needs-view">
+    <h2>Clipboard</h2>
+    <p class="hint" style="margin-top:0">Copy text on the Mac, move the cursor to the laptop, then press
+      <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd> (<kbd>Ctrl</kbd>+<kbd>Option</kbd>+<kbd>V</kbd> on a Mac keyboard) or use the button to have the bridge type it into the focused window.
+      Text only, typed for the laptop's keyboard layout (set below); characters it can't type are skipped.</p>
+    <div class="needs-login" id="clip-form">
+      <label>Text to type on the laptop
+        <textarea id="clip-text" rows="4" spellcheck="false" autocomplete="off"></textarea>
+        <span class="hint">For when copying doesn't reach the bridge (Deskflow's clipboard can be unreliable on a Wayland server). It replaces what the bridge holds.</span>
+      </label>
+      <div class="actions">
+        <button type="button" id="clip-type">Send and type</button>
+        <button type="button" class="secondary" id="clip-send">Send only</button>
+        <span id="clip-message"></span>
+      </div>
+    </div>
+    <div class="actions">
+      <span class="pill" id="clip">…</span>
+      <button type="button" id="type" class="needs-login">Type on laptop</button>
+      <button type="button" class="secondary needs-login" id="stop" hidden>Stop</button>
+    </div>
+  </section>
+
+  <section class="needs-login">
+    <h2>Settings</h2>
+    <form id="settings" novalidate>
+      <label>Screen name
+        <input name="screen_name" required maxlength="32" pattern="[A-Za-z0-9._\-]+" autocomplete="off">
+        <span class="hint">Must match a screen in the Deskflow server layout.</span>
+      </label>
+      <label>Bluetooth name
+        <input name="ble_name" required maxlength="22" autocomplete="off">
+        <span class="hint">What the laptop sees when pairing.</span>
+      </label>
+      <label>Screen width
+        <input name="screen_width" type="number" min="200" max="16384" required>
+      </label>
+      <label>Screen height
+        <input name="screen_height" type="number" min="200" max="16384" required>
+      </label>
+      <label class="wide">Keyboard (the Deskflow server's OS)
+        <select name="key_source">
+          <option value="mac">macOS server</option>
+          <option value="windows">Windows server</option>
+          <option value="linux">Linux server (X11 or Wayland)</option>
+          <option value="keyid">Other: translate characters (US layout)</option>
+        </select>
+        <span class="hint">The OS choices forward physical keys, so the laptop's own layout applies. Media keys work with all four.</span>
+      </label>
+      <label class="wide">Mouse
+        <select name="mouse_mode">
+          <option value="absolute">Absolute: the cursor goes exactly where Deskflow puts it</option>
+          <option value="relative">Relative: moves like a real mouse (try this with several monitors on the laptop)</option>
+        </select>
+        <span class="hint">Relative mode uses the laptop's pointer speed and acceleration, so the cursor may not line up with the screen edges Deskflow expects.</span>
+      </label>
+      <label>Laptop keyboard layout (for typing the clipboard)
+        <select name="typing_layout">
+          <option value="us">US</option>
+          <option value="gb">UK</option>
+          <option value="de">German</option>
+          <option value="fr">French (AZERTY)</option>
+          <option value="es">Spanish</option>
+          <option value="se">Swedish / Finnish</option>
+        </select>
+      </label>
+      <label>Typing speed (characters per second)
+        <input name="typing_rate" type="number" min="5" max="100" required>
+        <span class="hint">Lower it if the laptop drops or doubles characters.</span>
+      </label>
+      <div class="wide" id="button-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px"></div>
+      <label class="wide">TLS
+        <select name="tls">
+          <option value="any">On, accept any server certificate</option>
+          <option value="pinned">On, only the server certificate below</option>
+          <option value="off">Off (TLS disabled on the server)</option>
+        </select>
+        <span class="hint">If long mouse movements lag and Inbound backlog stays near 2048 B, decrypting can't keep up with your mouse: turn TLS off. The link is only the USB cable to the server.</span>
+      </label>
+      <label class="wide" id="fp-field">Server fingerprint (SHA-256)
+        <input name="fingerprint" class="fp" placeholder="AB:CD:EF:…" autocomplete="off">
+        <span class="hint">As shown in Deskflow's TLS settings. <a href="#" id="use-current">Use the one the server presented</a></span>
+      </label>
+      <div class="actions">
+        <button type="submit" id="save">Save and restart</button>
+        <button type="button" class="secondary" id="reset">Discard changes</button>
+        <span id="message"></span>
+      </div>
+    </form>
+  </section>
+
+  <section class="needs-login" id="update-section">
+    <h2>Firmware</h2>
+    <p class="hint" style="margin-top:0">Running <span id="firmware">…</span>.
+      <span id="update-text">Choose <code>pico-deskflow-bridge-pico2-w-update.uf2</code>. The bridge restarts into it, which takes a minute or two with USB gone; if the new firmware doesn't work, the bridge goes back to this one by itself.</span></p>
+    <div class="actions" id="update-form">
+      <input type="file" id="update-file" accept=".uf2" style="width:auto;flex:1 1 220px">
+      <button type="button" id="update">Install</button>
+      <span id="update-message"></span>
+    </div>
+  </section>
+
+  <section class="needs-login">
+    <h2>Password</h2>
+    <p class="hint" style="margin-top:0" id="password-state">…</p>
+    <form id="password-form" novalidate>
+      <label id="current-field">Current password
+        <input name="current" type="password" autocomplete="current-password">
+      </label>
+      <span></span>
+      <label>New password
+        <input name="new" type="password" autocomplete="new-password" minlength="4" maxlength="64">
+        <span class="hint" id="new-hint">At least 4 characters.</span>
+      </label>
+      <label>Repeat new password
+        <input id="confirm" type="password" autocomplete="new-password">
+      </label>
+      <label class="check wide"><input type="checkbox" name="protect_view" value="1"> Also needed to see status and the log (otherwise only for changes)</label>
+      <div class="actions">
+        <button type="submit" id="password-save">Save password</button>
+        <button type="button" class="secondary danger" id="password-remove">Remove password</button>
+        <button type="button" class="secondary" id="logout">Log out</button>
+        <span id="password-message"></span>
+      </div>
+    </form>
+  </section>
+
+  <section class="needs-view">
+    <div class="log-head">
+      <h2>Log</h2>
+      <span><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="follow" checked style="width:auto"> Follow</label></span>
+    </div>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const form = $("settings");
+let saved = null, serverFp = null, logPos = 0, restarting = false, auth = null, clipMax = 0;
+
+async function api(path, opts) {
+  const r = await fetch(path, Object.assign({ cache: "no-store" }, opts));
+  // The bridge has a password and this browser isn't logged in.
+  if (r.status === 401) { lock(true); throw new Error("log in first"); }
+  return r;
+}
+
+// `view`: whether viewing is locked too (the state request was refused).
+function lock(view) {
+  document.body.classList.add("locked");
+  document.body.classList.toggle("view-locked", view);
+}
+function unlock() { document.body.classList.remove("locked", "view-locked"); }
+
+function fmtBytes(n) { return n >= 10240 ? Math.round(n / 1024) + " KiB" : n + " B"; }
+function fmtUs(us) { return us >= 10000 ? (us / 1000).toFixed(0) + " ms" : (us / 1000).toFixed(us < 1000 ? 2 : 1) + " ms"; }
+
+function showDiag(d) {
+  $("d-rssi").textContent = d.ble_rssi != null ? d.ble_rssi + " dBm" : "not connected";
+  $("d-interval").textContent = d.ble_interval_us != null ? (d.ble_interval_us / 1000) + " ms" : "not connected";
+  $("d-latency").textContent = d.latency_avg_us != null ? fmtUs(d.latency_avg_us) + " / " + fmtUs(d.latency_max_us) : "no input yet";
+  $("d-tls-path").textContent = d.tls_path_avg_us != null ? fmtUs(d.tls_path_avg_us) + " / " + fmtUs(d.tls_path_max_us) : "no data";
+  $("d-backlog").textContent = d.backlog_avg != null ? d.backlog_avg + " B / " + d.backlog_max + " B" : "no data";
+  $("d-chip").textContent = d.in_chip_avg != null ? d.in_chip_avg + " / " + d.in_chip_max : "no data";
+  $("d-flow").textContent = d.flow_timeouts;
+  $("d-conns").textContent = "Deskflow " + d.deskflow_sessions + ", Bluetooth " + d.ble_connections;
+  $("d-heap").textContent = fmtBytes(d.heap_free) + " of " + fmtBytes(d.heap_size);
+  $("d-stack").textContent = fmtBytes(d.stack0_free) + " / " + fmtBytes(d.stack1_free);
+}
+
+let laptopsKey = "";
+function showLaptops(l) {
+  // Rebuilt only when something changed, so a click isn't lost to a repaint.
+  const key = JSON.stringify(l);
+  if (key === laptopsKey) return;
+  laptopsKey = key;
+  const box = $("laptops");
+  box.textContent = "";
+  l.list.forEach((laptop, i) => {
+    const row = document.createElement("div");
+    row.className = "laptop";
+    const dot = document.createElement("span");
+    dot.className = "dot " + (laptop.connected ? "ok" : laptop.active ? "warn" : "");
+    const name = document.createElement("div");
+    name.className = "name";
+    const state = laptop.connected ? "connected" : laptop.active ? "active, waiting for it to connect" : "paired";
+    name.textContent = (i + 1) + ": " + laptop.address + " (" + state + ")";
+    row.append(dot, name);
+    if (!laptop.active) row.append(laptopButton("Switch", "switch", i, ""));
+    row.append(laptopButton("Forget", "forget", i, "danger"));
+    box.append(row);
+  });
+  if (!l.list.length) box.textContent = "No laptop paired yet.";
+  $("pair").textContent = l.pairing ? "Waiting for a new laptop…" : "Pair a new laptop";
+  $("pair").disabled = l.pairing;
+}
+
+function laptopButton(label, verb, i, cls) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = label;
+  b.className = ("secondary needs-login " + cls).trim();
+  b.addEventListener("click", async () => {
+    if (verb === "forget" && !confirm("Forget this laptop? Remove the pairing on the laptop too.")) return;
+    try { await action("/api/laptop/" + verb + "?index=" + i); $("laptop-message").textContent = ""; refreshState(); }
+    catch (e) { $("laptop-message").textContent = "Couldn't do that: " + e.message; }
+  });
+  return b;
+}
+
+function showAuth(a, first) {
+  const changed = !auth || auth.password !== a.password || auth.protect_view !== a.protect_view;
+  auth = a;
+  if (a.password && !a.logged_in) lock(false); else unlock();
+  $("password-state").textContent = a.password
+    ? "The settings page has a password" + (a.protect_view ? ", also for viewing." : " for changes; anyone on this computer can view it.")
+    : "No password: anything on this computer can change the settings.";
+  $("current-field").style.visibility = a.password ? "" : "hidden";
+  $("password-remove").hidden = $("logout").hidden = !a.password;
+  if (first || changed) $("password-form").elements.protect_view.checked = a.protect_view;
+}
+
+function setDot(el, cls) { el.className = "dot " + cls; }
+
+function fill(settings) {
+  for (const [k, v] of Object.entries(settings)) {
+    const el = form.elements[k];
+    if (el) el.value = v ?? "";
+  }
+  syncTls();
+}
+
+function syncTls() {
+  $("fp-field").style.display = form.elements.tls.value === "pinned" ? "" : "none";
+}
+
+function fmtUptime(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, m = Math.floor(s / 60) % 60;
+  return (d ? d + "d " : "") + (d || h ? h + "h " : "") + m + "m " + (s % 60) + "s";
+}
+
+async function refreshState(first) {
+  try {
+    const r = await api("/api/state");
+    const { settings, status, diag, laptops, auth: a } = await r.json();
+    $("offline").style.display = "none";
+    if (restarting) { location.reload(); return; }
+    showAuth(a, first);
+    showDiag(diag);
+    showLaptops(laptops);
+    if (first || !saved) { saved = settings; fill(settings); }
+    const df = {
+      waiting: ["Waiting for USB network", "bad"],
+      connecting: ["Connecting…", "warn"],
+      connected: ["Connected", "ok"],
+      active: ["Connected, cursor here", "ok"],
+    }[status.deskflow] || [status.deskflow, ""];
+    $("df").textContent = df[0]; setDot($("df-dot"), df[1]);
+    $("ble").textContent = status.ble_connected ? "Connected" : status.ble_bonded ? "Paired, not connected" : "Waiting for pairing";
+    setDot($("ble-dot"), status.ble_connected ? "ok" : status.ble_bonded ? "warn" : "bad");
+    $("uptime").textContent = fmtUptime(status.uptime_s);
+    $("handshake").textContent = status.tls_handshake_ms != null ? status.tls_handshake_ms + " ms" : "none yet";
+    $("client-fp").textContent = status.client_fingerprint
+      ? status.client_fingerprint + "\n" + status.client_db_line
+      : "being created…";
+    serverFp = status.server_fingerprint;
+    $("server-fp").textContent = serverFp || "not connected yet";
+    const chars = status.clipboard_chars;
+    $("clip").textContent = status.typing != null
+      ? "Typing… " + status.typing + " / " + chars
+      : chars ? chars + " characters ready to type" + (status.clipboard_truncated ? " (first part only)" : "")
+      : "Nothing copied yet";
+    $("type").disabled = !chars || status.typing != null || !status.ble_connected;
+    $("type").title = status.ble_connected ? "" : "The laptop isn't connected";
+    $("stop").hidden = status.typing == null;
+    clipMax = status.clipboard_max;
+    $("firmware").textContent = status.firmware;
+    $("update-text").hidden = $("update-form").hidden = !status.updates;
+    $("clip-type").disabled = !status.ble_connected || status.typing != null;
+    $("clip-type").title = $("type").title;
+  } catch (e) {
+    // A refused request has already locked the page; anything else is offline.
+    $("offline").style.display = document.body.classList.contains("view-locked") ? "none" : "block";
+  }
+}
+
+async function refreshLog() {
+  if (document.body.classList.contains("view-locked")) return;
+  try {
+    for (let i = 0; i < 8; i++) {
+      const r = await api("/api/log?since=" + logPos);
+      const next = Number(r.headers.get("X-Log-Next"));
+      const text = await r.text();
+      if (next < logPos) $("log").textContent = "";
+      logPos = next;
+      if (!text) break;
+      $("log").append(text);
+    }
+    const log = $("log");
+    if (log.textContent.length > 200000) log.textContent = log.textContent.slice(-100000);
+    if ($("follow").checked) log.scrollTop = log.scrollHeight;
+  } catch (e) { /* shown by the state poll */ }
+}
+
+function message(text, cls) { const m = $("message"); m.textContent = text; m.className = cls || ""; }
+
+// POSTs an action; the X-Bridge header is what lets the device accept it.
+async function action(path) {
+  const r = await api(path, { method: "POST", headers: { "X-Bridge": "1" } });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+function restartingSoon() {
+  setTimeout(() => { restarting = true; }, 1500);
+}
+
+$("pair").addEventListener("click", async () => {
+  try { await action("/api/laptop/pair"); $("laptop-message").textContent = "Pair from the new laptop now, as \"" + saved.ble_name + "\". Others stay out once it's done."; refreshState(); }
+  catch (e) { $("laptop-message").textContent = "Couldn't do that: " + e.message; }
+});
+$("update").addEventListener("click", async () => {
+  const file = $("update-file").files[0];
+  if (!file) { formMessage("update-message", "Choose a file first.", "error"); return; }
+  if (!confirm("Install this firmware? The keyboard and mouse stop until the bridge is back.")) return;
+  $("update").disabled = true;
+  formMessage("update-message", "Uploading…");
+  try {
+    const r = await api("/api/update", { method: "POST", headers: { "X-Bridge": "1" }, body: file });
+    if (!r.ok) {
+      const res = await r.json().catch(() => ({}));
+      formMessage("update-message", res.error || "Not installed", "error");
+      $("update").disabled = false;
+      return;
+    }
+    formMessage("update-message", "Installing. The bridge is back in a minute or two.", "ok");
+    restartingSoon();
+  } catch (e) {
+    formMessage("update-message", "Couldn't reach the bridge.", "error");
+    $("update").disabled = false;
+  }
+});
+$("restart").addEventListener("click", async () => {
+  try { await action("/api/restart"); $("device-message").textContent = "Restarting…"; restartingSoon(); }
+  catch (e) { $("device-message").textContent = "Couldn't restart: " + e.message; }
+});
+$("forget").addEventListener("click", async () => {
+  if (!confirm("Forget all paired laptops? You'll need to pair them again (remove the old pairing on each laptop too).")) return;
+  try { await action("/api/forget-laptop"); $("device-message").textContent = "Forgotten. Restarting…"; restartingSoon(); }
+  catch (e) { $("device-message").textContent = "Couldn't forget: " + e.message; }
+});
+$("type").addEventListener("click", async () => {
+  try { await action("/api/type-clipboard"); refreshState(); }
+  catch (e) { $("clip").textContent = "Couldn't start typing: " + e.message; }
+});
+$("stop").addEventListener("click", async () => {
+  try { await action("/api/stop-typing"); refreshState(); } catch (e) { /* shown by the state poll */ }
+});
+
+async function sendClip(thenType) {
+  const text = $("clip-text").value;
+  if (!text) { formMessage("clip-message", "Enter some text first.", "error"); return; }
+  const size = new Blob([text]).size;
+  if (clipMax && size > clipMax) {
+    formMessage("clip-message", "Too long: " + fmtBytes(size) + ", the bridge holds " + fmtBytes(clipMax) + ".", "error");
+    return;
+  }
+  $("clip-send").disabled = true;
+  try {
+    const r = await api("/api/clipboard", {
+      method: "POST", headers: { "X-Bridge": "1", "Content-Type": "text/plain; charset=utf-8" }, body: text,
+    });
+    if (!r.ok) throw new Error(await r.text());
+    if (thenType) await action("/api/type-clipboard");
+    $("clip-text").value = "";
+    formMessage("clip-message", thenType ? "Sent, typing on the laptop." : "Sent.", "ok");
+    refreshState();
+  } catch (e) {
+    formMessage("clip-message", "Couldn't send: " + e.message, "error");
+  } finally {
+    $("clip-send").disabled = false;
+  }
+}
+$("clip-type").addEventListener("click", () => sendClip(true));
+$("clip-send").addEventListener("click", () => sendClip(false));
+$("clip-text").addEventListener("input", () => formMessage("clip-message", ""));
+
+// One pair of selects per button; `fill` sets them like any other field.
+const ACTIONS = [["none", "Nothing"], ["type", "Type clipboard"], ["stop", "Stop typing"], ["next", "Next laptop"],
+  ["release", "Release all keys"], ["lock", "Lock laptop (Super+L)"], ["playpause", "Play / pause"], ["mute", "Mute"],
+  ["restart", "Restart the bridge (hold 5 s)"]];
+for (const n of [1, 2, 3]) {
+  for (const [kind, label] of [["short", "short press"], ["long", "long press"]]) {
+    const field = document.createElement("label");
+    field.textContent = "Button " + n + " " + label;
+    const select = document.createElement("select");
+    select.name = "button" + n + "_" + kind;
+    for (const [value, text] of ACTIONS) select.add(new Option(text, value));
+    field.append(select);
+    $("button-fields").append(field);
+  }
+}
+
+let holdMs = [1000, 1000, 5000];
+async function pressPanel(i, long) {
+  try { await action("/api/panel/press?button=" + i + (long ? "&long=1" : "")); $("panel-message").textContent = ""; }
+  catch (e) { $("panel-message").textContent = "Couldn't press it: " + e.message; }
+}
+for (const i of [0, 1, 2]) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "secondary";
+  b.textContent = "Button " + (i + 1);
+  let timer = null;
+  b.addEventListener("pointerdown", () => { timer = setTimeout(() => { timer = null; pressPanel(i, true); }, holdMs[i]); });
+  const release = (fire) => () => { if (timer !== null) { clearTimeout(timer); timer = null; if (fire) pressPanel(i, false); } };
+  b.addEventListener("pointerup", release(true));
+  b.addEventListener("pointerleave", release(false));
+  $("panel-buttons").append(b);
+}
+
+async function refreshPanel() {
+  if (!$("panel").open) return;
+  try {
+    const p = await (await api("/api/panel")).json();
+    holdMs = p.hold_ms;
+    p.leds.forEach((on, i) => { $("led" + i).className = "dot " + (on ? (i === 3 ? "bad" : "ok") : ""); });
+  } catch (e) { /* shown by the state poll */ }
+}
+setInterval(refreshPanel, 200);
+
+form.addEventListener("input", () => message(""));
+form.elements.tls.addEventListener("change", syncTls);
+$("reset").addEventListener("click", () => { if (saved) fill(saved); message(""); });
+$("use-current").addEventListener("click", (e) => {
+  e.preventDefault();
+  if (serverFp) form.elements.fingerprint.value = serverFp;
+  else message("The server hasn't presented a certificate yet.", "error");
+});
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  for (const el of form.elements) el.classList && el.classList.remove("invalid");
+  const body = new URLSearchParams(new FormData(form));
+  $("save").disabled = true;
+  try {
+    const r = await api("/api/settings", {
+      method: "POST",
+      headers: { "X-Bridge": "1", "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const res = await r.json();
+    if (!r.ok) {
+      const el = form.elements[res.field];
+      if (el) { el.classList.add("invalid"); el.focus(); }
+      message(res.error || "Not saved", "error");
+      $("save").disabled = false;
+      return;
+    }
+    message("Saved. Restarting…", "ok");
+    // The bridge restarts ~0.3 s after answering; reload once it's back.
+    restartingSoon();
+  } catch (err) {
+    message("Couldn't reach the bridge.", "error");
+    $("save").disabled = false;
+  }
+});
+
+function formMessage(id, text, cls) { const m = $(id); m.textContent = text; m.className = cls || ""; }
+
+async function postForm(path, body) {
+  const r = await fetch(path, {
+    method: "POST", cache: "no-store",
+    headers: { "X-Bridge": "1", "Content-Type": "application/x-www-form-urlencoded" }, body,
+  });
+  let res = {};
+  try { res = await r.json(); } catch (e) { /* plain-text error */ }
+  return { ok: r.ok, status: r.status, res };
+}
+
+$("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("login-button").disabled = true;
+  formMessage("login-message", "Checking…");
+  try {
+    const { ok, res } = await postForm("/api/login", new URLSearchParams(new FormData(e.target)));
+    if (!ok) { formMessage("login-message", res.error || "Not logged in", "error"); return; }
+    e.target.reset();
+    formMessage("login-message", "");
+    unlock();
+    await refreshState(true);
+    refreshLog();
+  } catch (err) {
+    formMessage("login-message", "Couldn't reach the bridge.", "error");
+  } finally {
+    $("login-button").disabled = false;
+  }
+});
+
+async function savePassword(body, done) {
+  const f = $("password-form");
+  for (const el of f.elements) el.classList && el.classList.remove("invalid");
+  formMessage("password-message", "Saving…");
+  try {
+    const { ok, res } = await postForm("/api/password", body);
+    if (!ok) {
+      const el = f.elements[res.field];
+      if (el) { el.classList.add("invalid"); el.focus(); }
+      formMessage("password-message", res.error || "Not saved", "error");
+      return;
+    }
+    f.elements.current.value = f.elements.new.value = $("confirm").value = "";
+    formMessage("password-message", done, "ok");
+    refreshState(true);
+  } catch (err) {
+    formMessage("password-message", "Couldn't reach the bridge.", "error");
+  }
+}
+
+$("password-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.elements.new.value !== $("confirm").value) {
+    $("confirm").classList.add("invalid");
+    formMessage("password-message", "The new passwords don't match.", "error");
+    return;
+  }
+  if (!f.elements.new.value && !(auth && auth.password)) {
+    f.elements.new.classList.add("invalid");
+    formMessage("password-message", "Enter a password.", "error");
+    return;
+  }
+  savePassword(new URLSearchParams(new FormData(f)), f.elements.new.value ? "Password saved." : "Saved.");
+});
+$("password-remove").addEventListener("click", () => {
+  if (!confirm("Remove the password? Anything on this computer will be able to change the settings.")) return;
+  const body = new URLSearchParams({ current: $("password-form").elements.current.value, remove: "1" });
+  savePassword(body, "Password removed.");
+});
+$("logout").addEventListener("click", async () => {
+  try { await postForm("/api/logout", ""); } catch (e) { /* locks below anyway */ }
+  lock(auth && auth.protect_view);
+  refreshState();
+});
+
+refreshState(true);
+setInterval(refreshState, 2000);
+refreshLog();
+setInterval(refreshLog, 1500);
+</script>
+</body>
+</html>

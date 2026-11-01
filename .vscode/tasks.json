@@ -1,0 +1,31 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build UF2 (Pico 2 W)",
+      "detail": "Release firmware → pico-deskflow-bridge-pico2-w.uf2 in the repo root",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/uf2.sh pico2-w",
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        // cargo runs in firmware/, so its paths (including ../deskflow-proto/…)
+        // are relative to there.
+        "base": "$rustc",
+        "fileLocation": ["autoDetect", "${workspaceFolder}/firmware"]
+      }
+    },
+    {
+      "label": "Build UF2 (Pico W)",
+      "detail": "Release firmware → pico-deskflow-bridge-pico-w.uf2 in the repo root",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/uf2.sh pico-w",
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "base": "$rustc",
+        "fileLocation": ["autoDetect", "${workspaceFolder}/firmware"]
+      }
+    }
+  ]
+}
