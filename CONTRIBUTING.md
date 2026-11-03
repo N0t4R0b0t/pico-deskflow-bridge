@@ -74,6 +74,6 @@ UF2s, and a copy kept in R2 (`pico-deskflow-bridge/releases/<tag>/`, plus
 `releases/latest/` unless the tag has a suffix like `-rc1`). Each folder has a
 `sha256sums.txt` and a `version.txt`.
 
-The R2 job needs the repository variables `R2_BUCKET` and `R2_ENDPOINT` and the
-secrets `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`; without them it stops at
-its first step and says so.
+The R2 job needs four repository secrets: `R2_BUCKET`, `R2_ENDPOINT`,
+`R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` (`scripts/set-r2-secrets.sh` sets
+them); without them it stops at its first step and says so.

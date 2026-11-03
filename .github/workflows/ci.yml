@@ -128,8 +128,8 @@ jobs:
   #   snapshot/          every push to main; overwritten by the next one
   #   releases/<tag>/    a v* tag; kept
   #   releases/latest/   the newest v* tag without a "-" suffix (not a prerelease)
-  # Needs vars.R2_BUCKET and vars.R2_ENDPOINT and the secrets R2_ACCESS_KEY_ID
-  # and R2_SECRET_ACCESS_KEY, as in the other repos.
+  # Needs the secrets R2_BUCKET, R2_ENDPOINT, R2_ACCESS_KEY_ID and
+  # R2_SECRET_ACCESS_KEY.
   publish-r2:
     name: Publish UF2s to R2
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
@@ -142,13 +142,13 @@ jobs:
       group: publish-r2-${{ github.ref }}
       cancel-in-progress: false
     env:
-      R2_BUCKET: ${{ vars.R2_BUCKET }}
-      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
     steps:
       - name: Validate R2 configuration
         run: |
           if [ -z "${R2_BUCKET}" ] || [ -z "${R2_ENDPOINT}" ]; then
-            echo "::error::vars.R2_BUCKET and vars.R2_ENDPOINT must be set in this repository's Actions settings (Settings > Secrets and variables > Actions > Variables)."
+            echo "::error::The secrets R2_BUCKET and R2_ENDPOINT must be set in this repository's Actions settings (Settings > Secrets and variables > Actions > Secrets)."
             exit 1
           fi
       - uses: actions/download-artifact@v4
