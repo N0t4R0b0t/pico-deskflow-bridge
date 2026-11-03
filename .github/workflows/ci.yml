@@ -120,5 +120,79 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -l uf2
-          gh release create "$GITHUB_REF_NAME" uf2/*.uf2 \
+          case "$GITHUB_REF_NAME" in *-*) pre=--prerelease ;; *) pre= ;; esac
+          gh release create "$GITHUB_REF_NAME" uf2/*.uf2 $pre \
             --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+
+  # Uploads the UF2s to Cloudflare R2, under pico-deskflow-bridge/:
+  #   snapshot/          every push to main; overwritten by the next one
+  #   releases/<tag>/    a v* tag; kept
+  #   releases/latest/   the newest v* tag without a "-" suffix (not a prerelease)
+  # Needs vars.R2_BUCKET and vars.R2_ENDPOINT and the secrets R2_ACCESS_KEY_ID
+  # and R2_SECRET_ACCESS_KEY, as in the other repos.
+  publish-r2:
+    name: Publish UF2s to R2
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    needs: [host, tls-offload, firmware]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    # Two pushes in a row shouldn't interleave their uploads.
+    concurrency:
+      group: publish-r2-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+    steps:
+      - name: Validate R2 configuration
+        run: |
+          if [ -z "${R2_BUCKET}" ] || [ -z "${R2_ENDPOINT}" ]; then
+            echo "::error::vars.R2_BUCKET and vars.R2_ENDPOINT must be set in this repository's Actions settings (Settings > Secrets and variables > Actions > Variables)."
+            exit 1
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          path: uf2
+          merge-multiple: true
+      - name: Checksums and version
+        working-directory: uf2
+        run: |
+          sha256sum *.uf2 | tee sha256sums.txt
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then name="${GITHUB_REF_NAME}"; else name="snapshot of main"; fi
+          printf '%s\ncommit %s\nbuilt %s\n' "${name}" "${GITHUB_SHA}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee version.txt
+      - name: Publish to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          put() { # <file> <prefix> <cache-control>
+            aws s3 cp "$1" "s3://${R2_BUCKET}/pico-deskflow-bridge/$2/$(basename "$1")" \
+              --endpoint-url "${R2_ENDPOINT}" --cache-control "$3"
+          }
+          for f in uf2/*.uf2 uf2/sha256sums.txt uf2/version.txt; do
+            if [ "${GITHUB_REF_TYPE}" = tag ]; then
+              put "$f" "releases/${GITHUB_REF_NAME}" "public, max-age=31536000, immutable"
+              case "${GITHUB_REF_NAME}" in
+                *-*) ;;  # a prerelease doesn't become "latest"
+                *) put "$f" releases/latest "no-cache" ;;
+              esac
+            else
+              put "$f" snapshot "no-cache"
+            fi
+          done
+      - name: Summary
+        run: |
+          {
+            echo "### Published to R2 :package:"
+            echo ""
+            cat uf2/version.txt
+            echo ""
+            echo "Files:"
+            for f in uf2/*; do echo "- $(basename "$f")"; done
+            echo ""
+            echo '```'
+            cat uf2/sha256sums.txt
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"

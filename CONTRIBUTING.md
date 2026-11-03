@@ -64,3 +64,16 @@ behind them.
 Keep them focused, say what you tested (host tests, which board, which server
 and laptop), and update the README or TESTING.md if behaviour changes. By
 contributing, you agree your work is released under the [MIT license](LICENSE).
+
+## Snapshots and releases
+
+Every push to `main` that passes CI uploads a **snapshot** of the UF2s to
+Cloudflare R2, overwriting the last one (`pico-deskflow-bridge/snapshot/`).
+Pushing a tag like `v0.1.0` makes a **release**: a GitHub release with the
+UF2s, and a copy kept in R2 (`pico-deskflow-bridge/releases/<tag>/`, plus
+`releases/latest/` unless the tag has a suffix like `-rc1`). Each folder has a
+`sha256sums.txt` and a `version.txt`.
+
+The R2 job needs the repository variables `R2_BUCKET` and `R2_ENDPOINT` and the
+secrets `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`; without them it stops at
+its first step and says so.
