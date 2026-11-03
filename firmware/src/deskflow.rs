@@ -4,6 +4,7 @@
 
 use deskflow_proto::clipboard::{self as clip, CHUNK_HEADER_LEN, Event};
 use deskflow_proto::hid::{HidMapper, Report};
+use deskflow_proto::keymap;
 use deskflow_proto::pairing::Command;
 use deskflow_proto::settings::Settings;
 use deskflow_proto::tls::{self, DbLine, DisplayFingerprint, Fingerprint, Rejection, ServerTrust};
@@ -267,6 +268,12 @@ async fn session<L: Read + Write>(
             Message::KeyRepeat { button, .. } if hotkey == Some(button) => {}
             Message::KeyUp { button, .. } if hotkey == Some(button) => hotkey = None,
             Message::KeyDown { .. } | Message::KeyRepeat { .. } | Message::KeyUp { .. } => {
+                if let Message::KeyDown { id, mask, button } = parsed
+                    && keymap::consumer_usage_for(id).is_none()
+                    && keymap::usage_for(settings.key_source, id, button).is_none()
+                {
+                    log::info!("deskflow: no key for id {:#06x}, button {}, mask {:#06x}: dropped", id, button, mask);
+                }
                 if matches!(parsed, Message::KeyDown { .. }) && clipboard::is_typing() {
                     log::info!("clipboard: typing stopped by a key press");
                     clipboard::stop_typing();
